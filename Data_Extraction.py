@@ -25,7 +25,6 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
 # Get boxscore urls
     if year_start < 1920 or year_end > 2023:
         raise Exception.valueError("Invalid Date Range")
-    boxscores = []
     for year in range(year_start,year_end+1):
         year_str = str(year)
         r = requests.get("https://www.pro-football-reference.com/years/" + year_str + "/")
@@ -62,23 +61,36 @@ def parse_boxscores(data_file: str, file_name: str):
                 if sc != None:
                     return sc
             return None
-
-        url = "https://www.pro-football-reference.com" + url
-        r = requests.get(url)
-        sleep_fun()
-        parser = BeautifulSoup(r.text,"html.parser")
-        comments = parser.find_all(string = lambda text : isinstance(text, Comment))
-        comments = list(set(comments))
         
-        #Only want the comments that contain tables
-        for c in comments:
-            try:
-                pd.read_html(c)
-            except:
-                comments.remove(c)
+        try:
+            url = "https://www.pro-football-reference.com" + url
+            print(url)
+            r = requests.get(url)
+            sleep_fun()
+            parser = BeautifulSoup(r.text,"html.parser")
+            comments = parser.find_all(string = lambda text : isinstance(text, Comment))
+            comments = list(set(comments))
+            
+            #Only want the comments that contain tables
+            for c in comments:
+                try:
+                    pd.read_html(c)
+                except:
+                    comments.remove(c)
 
 
-        comment_parsers = [BeautifulSoup(comment,"html.parser") for comment in comments]
+            comment_parsers = [BeautifulSoup(comment,"html.parser") for comment in comments]
+
+        except Exception as ex:
+            e = "Url Parsing Error"
+            print(url, e)
+            print(ex)
+            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
+                bad_urls["boxscore"].append(url)
+                bad_urls["errors"].append([e])
+            else:
+                bad_urls["errors"][-1].append(e)
+            return {}
 
         # Get Data from Game Info Table
         game_info_dict = {}
@@ -325,6 +337,8 @@ def parse_boxscores(data_file: str, file_name: str):
 
         return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data | game_info_dict | team_stats_dict | player_stats | starters_dict | snaps | pbp   
     tqdm.pandas(desc='Progress')
+    data.url = data.url.astype(str)
+    print(data.url)
     new_data = data.progress_apply(lambda x: process_url(x.url, x.year,x.week), axis=1,result_type = 'expand')
     while True:
         try:
@@ -340,6 +354,12 @@ def parse_boxscores(data_file: str, file_name: str):
         except:
             print("close error file")
             input()
+
+
+
+
+
+
 
 
 

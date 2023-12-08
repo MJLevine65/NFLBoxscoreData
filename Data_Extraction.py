@@ -338,7 +338,6 @@ def parse_boxscores(data_file: str, file_name: str):
         return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data | game_info_dict | team_stats_dict | player_stats | starters_dict | snaps | pbp   
     tqdm.pandas(desc='Progress')
     data.url = data.url.astype(str)
-    print(data.url)
     new_data = data.progress_apply(lambda x: process_url(x.url, x.year,x.week), axis=1,result_type = 'expand')
     while True:
         try:
@@ -354,7 +353,6 @@ def parse_boxscores(data_file: str, file_name: str):
         except:
             print("close error file")
             input()
-
 
 
 

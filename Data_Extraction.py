@@ -341,11 +341,6 @@ def parse_boxscores(data_file: str, file_name: str):
             print("close error file")
             input()
 
-parse_boxscores("19701_data.csv","test_data.csv")
-
-df = pd.read_csv("test_data.csv")
-
-
 
 
 

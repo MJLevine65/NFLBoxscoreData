@@ -54,16 +54,34 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
         df.to_csv(file_name)
 
 def parse_boxscores(data_file: str, file_name: str):
+
+    def find_comment(comment_parsers,tag:str,idstr:str,classstr:str):
+        """
+        comment_parsers: List of BS4 parsers of each commented part of the html
+          file to find the one that matches the criteria defined by the rest of the inputs
+        tag: HTML tag of comment parser that is being searched for
+        idstr: id of comment pareser that is being searched for
+        classstr: class of comment parser that is being searched for
+        """
+        for c in comment_parsers:
+            sc = c.find(tag, id=idstr, class_=classstr)
+            if sc != None:
+                return sc
+        return None
+    
+    def error_fun(err:str,url:str,ex:Exception):
+            print(url, err)
+            print(ex)
+            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
+                bad_urls["boxscore"].append(url)
+                bad_urls["errors"].append([e])
+            else:
+                bad_urls["errors"][-1].append(e)
+
+
     data = pd.read_csv(data_file)
     bad_urls = {"boxscore" : [], "errors" : []}
     def process_url(url:str,year: int, week: int):
-
-        def find_comment(comment_parsers,tag:str,idstr:str,classstr:str):
-            for c in comment_parsers:
-                sc = c.find(tag, id=idstr, class_=classstr)
-                if sc != None:
-                    return sc
-            return None
 
         url = "https://www.pro-football-reference.com" + url
         print(url)
@@ -113,14 +131,7 @@ def parse_boxscores(data_file: str, file_name: str):
             records = score_box.find_all("div",class_ = "scores")
             game_info_dict["Away Record"], game_info_dict["Home Record"] = [item.nextSibling.text for item in records][:2]
         except Exception as ex:
-            e = "Game Info Error"
-            print(url, e)
-            print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
-            else:
-                bad_urls["errors"][-1].append(e)
+            error_fun("Game Info Error",url,ex)
             return {}
 
 
@@ -137,14 +148,7 @@ def parse_boxscores(data_file: str, file_name: str):
                         scoring_data["Scoring_Data"][stat.attrs['data-stat']] += [scoring_data["Scoring_Data"][stat.attrs['data-stat']][-1]] \
                             if stat.text == "" else [stat.text]
         except Exception as ex:
-            e = "Scoring Data Error"
-            print(url, e)
-            print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
-            else:
-                bad_urls["errors"][-1].append(e)
+            error_fun("Scoring Data Error",url,ex)
 
         # Get Data from Teams Stats Table
         team_stats_dict = {"Home Team Stats" : {}, "Away Team Stats" : {}}
@@ -159,14 +163,7 @@ def parse_boxscores(data_file: str, file_name: str):
                     team_stats_dict["Home Team Stats"][stat[0].text] += [stat[2].text]
                     team_stats_dict["Away Team Stats"][stat[0].text] += [stat[1].text]
         except Exception as ex:
-            e = "Team Stats Error"
-            print(url, e)
-            print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
-            else:
-                bad_urls["errors"][-1].append(e)
+            error_fun("Team Stats Error",url,ex)
             
         #player stats
         def get_player_stats(home:str,away:str,info):
@@ -223,14 +220,7 @@ def parse_boxscores(data_file: str, file_name: str):
             ad_info = find_comment(comment_parsers,'div','div_defense_advanced','table_container')
             player_stats["Home Adv Def Player Stats"], player_stats["Away Adv Def Player Stats"] = ax(ad_info)
         except Exception as ex:
-            e = "Player Stats Error"
-            print(url, e)
-            print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
-            else:
-                bad_urls["errors"][-1].append(e)
+            error_fun("Player Stats Error",url,ex)
 
         starters_dict = {"Home Starters" : {}, "Away Starters" : {}}
         #Starters
@@ -246,14 +236,7 @@ def parse_boxscores(data_file: str, file_name: str):
                 starters_dict["Away Starters"][item[1].text] = [item[0].text] if item[1].text not in starters_dict["Away Starters"] else \
                                                                 starters_dict["Away Starters"][item[1].text] + [item[0].text]
         except Exception as ex:
-            e = "Starters Error"
-            print(url, e)
-            print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
-            else:
-                bad_urls["errors"][-1].append(e)
+            error_fun("Starters Error",url,ex)
 
         snaps = {"Home Snaps" : {}, "Away Snaps" : {}}
         try:
@@ -296,14 +279,7 @@ def parse_boxscores(data_file: str, file_name: str):
                         drives["Away Drives"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in drives["Away Drives"] else \
                             drives["Away Drives"][stat.attrs['data-stat']] + [stat.text]
         except Exception as ex:
-            e = "Drives Error"
-            print(url, e)
-            print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
-            else:
-                bad_urls["errors"][-1].append(e)
+            error_fun("Drives Error",url,ex)
 
         #Get Play-By-Play Data
         pbp = {"Play-By-Play" : {}}
@@ -317,14 +293,7 @@ def parse_boxscores(data_file: str, file_name: str):
                         pbp["Play-By-Play"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in pbp["Play-By-Play"] else \
                             pbp["Play-By-Play"][stat.attrs['data-stat']] + [stat.text]
         except Exception as ex:
-            e = "Play-By-Play Error"
-            print(url, e)
-            print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])#
-            else:
-                bad_urls["errors"][-1].append(e)
+            error_fun("Play-By-Play Error",url,ex)
 
         return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data | game_info_dict | team_stats_dict | player_stats | starters_dict | snaps | pbp   
     tqdm.pandas(desc='Progress')
@@ -344,33 +313,10 @@ def parse_boxscores(data_file: str, file_name: str):
             print("close error file")
             input()
 
+if __name__ == "__main__":
+
 #parse_boxscores("2010week17_2023_urls.csv","2010week17_2023_data.csv")
-us = ["test_data_bad_urls.csv","1995week15_2023_data_bad_urls.csv","2010week17_2023_data_bad_urls.csv"]
-datas = []
-for u in us:
-    datas.append(pd.read_csv(u))
 
-for i in range(len(datas)):
-    for index,row in datas[i].iterrows():
-        if row['errors'] == "['Game Info Error']":
-            datas[i].drop(index,inplace = True)
-
-new_urls = pd.concat(datas,axis = 0)
-new_urls.to_csv("Bad_Urls.csv",index = False)
-
-"""
-data = pd.read_csv("19702023_data.csv")
-def fil(url,year,week):
-    year = int(year)
-    week = int(week)
-    if year > 2010 or (year == 2010 and week > 16):
-        return {"url":url,"year":year,"week":week}
-    else:
-        return {}
-
-new_data = pd.DataFrame(data.apply(lambda x: fil(x.url, x.year,x.week), axis=1,result_type = 'expand')).dropna()
-print(new_data)
-new_data.to_csv("2010week17_2023_urls.csv",index = False)"""
 
 
 

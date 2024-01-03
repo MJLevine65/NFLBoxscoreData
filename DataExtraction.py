@@ -315,7 +315,6 @@ def parse_boxscores(data_file: str, file_name: str):
 
 if __name__ == "__main__":
 
-#parse_boxscores("2010week17_2023_urls.csv","2010week17_2023_data.csv")
 
 
 

@@ -3,19 +3,8 @@ import numpy as np
 import ast
 import time
 
-"""
-def fun(hom,awa):
-    if hom == "{}" and awa != "{}":
-        r = ast.literal_eval(awa)
-        a = pd.DataFrame(r)
-        tms = list(a['team'].unique())
-        if len(tms) == 2:
-            away_s = a.loc[a["team"] == tms[0]].to_dict('list')
-            home_s = a.loc[a["team"] == tms[1]].to_dict('list')
-            return {"Home Adv Def Player Stats" : home_s} | { "Away Adv Def Player Stats" : away_s }
-    return {"Home Adv Def Player Stats" : hom } | { "Away Adv Def Player Stats" : awa }
-"""
 def combine_csvs(datafiles: list, filename: str):
+    #Combines together multiple data csvs and drops all rows that have an undefined year entry
     dfs = []
     for file in datafiles:
         dfs.append(pd.read_csv(file))
@@ -26,6 +15,7 @@ def combine_csvs(datafiles: list, filename: str):
         except:
             datafile.drop(index,axis = 0,inplace = True)
     datafile.to_csv(filename,index = False)
+
 def process_data(data_file: str, file_name: str):
     data = pd.read_csv(data_file)
     def recs(hom,awa):
@@ -53,6 +43,7 @@ def process_data(data_file: str, file_name: str):
     
 
     def parse_weather(weather):
+        #Parses the weather data entry to get all information into a dictionary
         if type(weather) == str:
             w = {}
             weather = weather.split(",")
@@ -276,7 +267,6 @@ def process_data(data_file: str, file_name: str):
 
 
 if __name__ == "__main__":
-    process_data("1970_2023_data.csv","1970_2023_boxscore_data.xlsx")
 
     
 

@@ -5,33 +5,32 @@ from tqdm import tqdm
 
 t = time.time()
 
-def sleep_fun():
-    #PFR Website only accepts 20 requests a minute
-    global t
-    g = time.time() - t
-    if g > 3:
-        t=time.time()
-        return
+def sleep_fun(time : float) -> float:
+    # PFR Website only accepts 20 requests a minute
+    # This function delays requests to 1 every 3 seconds
+    difference = time.time() - time
+    if difference > 3:
+        return time.time()
     else:
         r = random.randint(1,10)/10
-        time.sleep((3.1-g)+r)
-        t = time.time()
-
-#comment input isn't a file
-warnings.filterwarnings('ignore',message =\
-"The input looks more like a filename than markup. You may want to open this file and pass the filehandle into Beautiful Soup." )
-
+        time.sleep((3.1-difference)+r)
+        return time.time()
 
 def get_boxscores(year_start: int, year_end: int, file_name: str):
+    """
+    Gets the boxscore url for each game in the range year_start to year_end
+    Saves boxscores to file_name.csv
+    """
     data = {'url' : [], 'year' : [], 'week' : []}
-# Get boxscore urls
+    # Get boxscore urls
     if year_start < 1920 or year_end > 2023:
         raise Exception.valueError("Invalid Date Range")
     boxscores = []
+    current_time = time.time()
     for year in range(year_start,year_end+1):
         year_str = str(year)
         r = requests.get("https://www.pro-football-reference.com/years/" + year_str + "/")
-        sleep_fun()
+        current_time = sleep_fun(current_time)
         parser = BeautifulSoup(r.text,"html.parser")
         weeks = []
         for item in parser.find_all("a",href = True):
@@ -41,7 +40,7 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
         i = 1
         for week in weeks:
             r = requests.get("https://www.pro-football-reference.com" + week)
-            sleep_fun()
+            current_time = sleep_fun(current_time)
             parser = BeautifulSoup(r.text,"html.parser")
             for item in parser.find_all("a",href = True):
                 if ("/boxscores/") in item['href']:
@@ -51,7 +50,7 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
                         data['week'].append(i)
             i += 1
         df = pd.DataFrame(data)
-        df.to_csv(file_name)
+        df.to_csv(file_name + ".csv", index = False)
 
 def parse_boxscores(data_file: str, file_name: str):
 
@@ -63,20 +62,21 @@ def parse_boxscores(data_file: str, file_name: str):
         idstr: id of comment pareser that is being searched for
         classstr: class of comment parser that is being searched for
         """
-        for c in comment_parsers:
-            sc = c.find(tag, id=idstr, class_=classstr)
+        for comment in comment_parsers:
+            sc = comment.find(tag, id=idstr, class_=classstr)
             if sc != None:
                 return sc
         return None
     
     def error_fun(err:str,url:str,ex:Exception):
+            #Whenever an error occurs record the url and error
             print(url, err)
             print(ex)
             if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
                 bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
+                bad_urls["errors"].append([ex])
             else:
-                bad_urls["errors"][-1].append(e)
+                bad_urls["errors"][-1].append(ex)
 
 
     data = pd.read_csv(data_file)
@@ -84,9 +84,8 @@ def parse_boxscores(data_file: str, file_name: str):
     def process_url(url:str,year: int, week: int):
 
         url = "https://www.pro-football-reference.com" + url
-        print(url)
         r = requests.get(url)
-        sleep_fun()
+        current_time = sleep_fun(current_time)
         parser = BeautifulSoup(r.text,"html.parser")
         comments = parser.find_all(string = lambda text : isinstance(text, Comment))
         comments = list(set(comments))
@@ -314,6 +313,11 @@ def parse_boxscores(data_file: str, file_name: str):
             input()
 
 if __name__ == "__main__":
+    warnings.filterwarnings('ignore',message =\
+"The input looks more like a filename than markup. You may want to open this file\
+      and pass the filehandle into Beautiful Soup." )
+
+
 
 
 

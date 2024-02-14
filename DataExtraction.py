@@ -74,9 +74,9 @@ def parse_boxscores(data_file: str, file_name: str):
             print(ex)
             if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
                 bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([e])
+                bad_urls["errors"].append([ex])
             else:
-                bad_urls["errors"][-1].append(e)
+                bad_urls["errors"][-1].append(ex)
 
 
     data = pd.read_csv(data_file)
@@ -314,7 +314,7 @@ def parse_boxscores(data_file: str, file_name: str):
             input()
 
 if __name__ == "__main__":
-
+    parse_boxscores("BoxscoreData/2023_boxscores.csv","test.csv")
 
 
 

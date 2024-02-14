@@ -109,6 +109,37 @@ def parse_boxscores(data_file: str, file_name: str):
                         if stat.text == "" else [stat.text]
         return scoring_data
 
+    def get_team_stats(comment_parsers):
+        team_stats_dict = {"Home Team Stats" : {}, "Away Team Stats" : {}}
+        team_stats_info  = find_comment(comment_parsers,'div','div_team_stats','table_container').tbody.select("tr:not(.thead)")
+        for stat in team_stats_info: #stat variable in this case applies to the whole row since each row is a stat
+            stat = list(stat)
+            if stat[0].text not in team_stats_dict["Home Team Stats"]:
+                team_stats_dict["Home Team Stats"][stat[0].text] = [stat[2].text]
+                team_stats_dict["Away Team Stats"][stat[0].text] = [stat[1].text]
+            else:
+                team_stats_dict["Home Team Stats"][stat[0].text] += [stat[2].text]
+                team_stats_dict["Away Team Stats"][stat[0].text] += [stat[1].text]
+
+    def get_player_stats(home:str,away:str,info):
+            home_player_data = {}
+            away_player_data = {}
+            a = list(list(info)[0])[1].text
+            for item in info:
+                item = list(item)
+                if item[1].text != a:
+                    for stat in item:
+                        if stat.attrs['data-stat'] not in home_player_data:
+                            home_player_data[stat.attrs['data-stat']] = ["0"] if stat.text == "" else [stat.text]
+                        else:
+                            home_player_data[stat.attrs['data-stat']] += ["0"] if stat.text == "" else [stat.text]
+                else:
+                    for stat in item:
+                        if stat.attrs['data-stat'] not in away_player_data:
+                            away_player_data[stat.attrs['data-stat']] = ["0"] if stat.text == "" else [stat.text]
+                        else:
+                            away_player_data[stat.attrs['data-stat']] += ["0"] if stat.text == "" else [stat.text]
+            return home_player_data,away_player_data
 
     def process_url(url:str,year: int, week: int):
 
@@ -146,41 +177,12 @@ def parse_boxscores(data_file: str, file_name: str):
             error_fun("Scoring Data Error",url,ex)
 
         # Get Data from Teams Stats Table
-        team_stats_dict = {"Home Team Stats" : {}, "Away Team Stats" : {}}
         try:
-            team_stats_info  = find_comment(comment_parsers,'div','div_team_stats','table_container').tbody.select("tr:not(.thead)")
-            for stat in team_stats_info: #stat variable in this case applies to the whole row since each row is a stat
-                stat = list(stat)
-                if stat[0].text not in team_stats_dict["Home Team Stats"]:
-                    team_stats_dict["Home Team Stats"][stat[0].text] = [stat[2].text]
-                    team_stats_dict["Away Team Stats"][stat[0].text] = [stat[1].text]
-                else:
-                    team_stats_dict["Home Team Stats"][stat[0].text] += [stat[2].text]
-                    team_stats_dict["Away Team Stats"][stat[0].text] += [stat[1].text]
+            team_stats_dict = get_team_stats(comment_parsers)
         except Exception as ex:
             error_fun("Team Stats Error",url,ex)
             
         #player stats
-        def get_player_stats(home:str,away:str,info):
-            home_player_data = {}
-            away_player_data = {}
-            a = list(list(info)[0])[1].text
-            for item in info:
-                item = list(item)
-                if item[1].text != a:
-                    for stat in item:
-                        if stat.attrs['data-stat'] not in home_player_data:
-                            home_player_data[stat.attrs['data-stat']] = ["0"] if stat.text == "" else [stat.text]
-                        else:
-                            home_player_data[stat.attrs['data-stat']] += ["0"] if stat.text == "" else [stat.text]
-                else:
-                    for stat in item:
-                        if stat.attrs['data-stat'] not in away_player_data:
-                            away_player_data[stat.attrs['data-stat']] = ["0"] if stat.text == "" else [stat.text]
-                        else:
-                            away_player_data[stat.attrs['data-stat']] += ["0"] if stat.text == "" else [stat.text]
-            return home_player_data,away_player_data
-
         player_stats = {}
         try:
             ax = (lambda x: get_player_stats(home,vis,x.tbody.select("tr:not(.thead)")) if x != None else ({}, {}))
@@ -188,32 +190,37 @@ def parse_boxscores(data_file: str, file_name: str):
             offense_info = parser.find('div', id="div_player_offense", class_="table_container")
             player_stats["Home Off Player Stats"], player_stats["Away Off Player Stats"] = ax(offense_info)
 
-            #Get defensive player stats
-            defense_info = find_comment(comment_parsers,'div','div_player_defense','table_container')
-            player_stats["Home Def Player Stats"], player_stats["Away Def Player Stats"] = ax(defense_info)
+            for id,name in [["player_defnese","Def"],["returns","Ret"],["kicking","Kick"],["passing_advanced","Adv Pass"],\
+            ["receiving_advanced","Adv Rec"],["rushing_advanced","Adv Rush"],["defense_advanced","Adv Def"]]:
+                info = find_comment(comment_parsers,'div','div_' + id,'table_container')
+                player_stats["Home " + name + " Player Stats"], player_stats["Away " + name " Player Stats"] = ax(info)
 
-            #Get return player stats
-            returns_info = find_comment(comment_parsers,'div','div_returns','table_container')
-            player_stats["Home Ret Player Stats"], player_stats["Away Ret Player Stats"] = ax(returns_info)
+            # #Get defensive player stats
+            # defense_info = find_comment(comment_parsers,'div','div_player_defense','table_container')
+            # player_stats["Home Def Player Stats"], player_stats["Away Def Player Stats"] = ax(defense_info)
 
-            #Get kicking player stats
-            kicking_info = find_comment(comment_parsers,'div','div_kicking','table_container')
-            player_stats["Home Kick Player Stats"], player_stats["Away Kick Player Stats"] = ax(kicking_info)
-            #Advanced passing
-            ap_info = find_comment(comment_parsers,'div','div_passing_advanced','table_container')
-            player_stats["Home Adv Pass Player Stats"], player_stats["Away Adv Pass Player Stats"] = ax(ap_info)
+            # #Get return player stats
+            # returns_info = find_comment(comment_parsers,'div','div_returns','table_container')
+            # player_stats["Home Ret Player Stats"], player_stats["Away Ret Player Stats"] = ax(returns_info)
 
-            #Advanced recieving
-            ar_info = find_comment(comment_parsers,'div','div_receiving_advanced','table_container')
-            player_stats["Home Adv Rec Player Stats"], player_stats["Away Adv Rec Player Stats"] = ax(ar_info)
+            # #Get kicking player stats
+            # kicking_info = find_comment(comment_parsers,'div','div_kicking','table_container')
+            # player_stats["Home Kick Player Stats"], player_stats["Away Kick Player Stats"] = ax(kicking_info)
+            # #Advanced passing
+            # ap_info = find_comment(comment_parsers,'div','div_passing_advanced','table_container')
+            # player_stats["Home Adv Pass Player Stats"], player_stats["Away Adv Pass Player Stats"] = ax(ap_info)
+
+            # #Advanced recieving
+            # ar_info = find_comment(comment_parsers,'div','div_receiving_advanced','table_container')
+            # player_stats["Home Adv Rec Player Stats"], player_stats["Away Adv Rec Player Stats"] = ax(ar_info)
             
-            #Advanced rushing
-            aru_info = find_comment(comment_parsers,'div','div_rushing_advanced','table_container')
-            player_stats["Home Adv Rush Player Stats"], player_stats["Away Adv Rush Player Stats"] = ax(aru_info)
+            # #Advanced rushing
+            # aru_info = find_comment(comment_parsers,'div','div_rushing_advanced','table_container')
+            # player_stats["Home Adv Rush Player Stats"], player_stats["Away Adv Rush Player Stats"] = ax(aru_info)
             
-            #Advanced defense
-            ad_info = find_comment(comment_parsers,'div','div_defense_advanced','table_container')
-            player_stats["Home Adv Def Player Stats"], player_stats["Away Adv Def Player Stats"] = ax(ad_info)
+            # #Advanced defense
+            # ad_info = find_comment(comment_parsers,'div','div_defense_advanced','table_container')
+            # player_stats["Home Adv Def Player Stats"], player_stats["Away Adv Def Player Stats"] = ax(ad_info)
         except Exception as ex:
             error_fun("Player Stats Error",url,ex)
 

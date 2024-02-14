@@ -1,14 +1,13 @@
 from bs4 import BeautifulSoup, Comment
 import pandas as pd
-import random,requests,time, warnings
+import random,requests,time, warnings,os
 from tqdm import tqdm
 
-t = time.time()
 
-def sleep_fun(time : float) -> float:
+def sleep_fun(current_time : float) -> float:
     # PFR Website only accepts 20 requests a minute
     # This function delays requests to 1 every 3 seconds
-    difference = time.time() - time
+    difference = time.time() - current_time
     if difference > 3:
         return time.time()
     else:
@@ -21,39 +20,33 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
     Gets the boxscore url for each game in the range year_start to year_end
     Saves boxscores to file_name.csv
     """
-    data = {'url' : [], 'year' : [], 'week' : []}
-    # Get boxscore urls
+    boxscores = pd.DataFrame(columns = ['url','year','week']) 
     if year_start < 1920 or year_end > 2023:
         raise Exception.valueError("Invalid Date Range")
-    boxscores = []
     current_time = time.time()
+
+    #Iterate over years, get week urls for each week in each year
     for year in range(year_start,year_end+1):
-        year_str = str(year)
-        r = requests.get("https://www.pro-football-reference.com/years/" + year_str + "/")
+        r = requests.get("https://www.pro-football-reference.com/years/" + str(year) + "/")
         current_time = sleep_fun(current_time)
         parser = BeautifulSoup(r.text,"html.parser")
         weeks = []
         for item in parser.find_all("a",href = True):
-            if (year_str + "/week_") in item['href']:
-                if item['href'] not in weeks:
-                    weeks.append(item['href'])
-        i = 1
-        for week in weeks:
-            r = requests.get("https://www.pro-football-reference.com" + week)
+            if ((str(year) + "/week_") in item['href']) and (item['href'] not in weeks):
+                weeks.append("https://www.pro-football-reference.com" + item['href'])
+        
+        #Iterate over weeks, get boxscore url for each game in each week
+        for week,week_url in enumerate(weeks):
+            r = requests.get(week_url)
             current_time = sleep_fun(current_time)
             parser = BeautifulSoup(r.text,"html.parser")
             for item in parser.find_all("a",href = True):
-                if ("/boxscores/") in item['href']:
-                    if item['href'] not in data['url']:
-                        data['url'].append(item['href'])
-                        data['year'].append(year)
-                        data['week'].append(i)
-            i += 1
-        df = pd.DataFrame(data)
-        df.to_csv(file_name + ".csv", index = False)
+                if (("/boxscores/") in item['href']) and (item['href'] not in boxscores['url']):
+                    boxscores = \
+                    boxscores._append({'url':item['href'],'year':year, 'week': week+1},ignore_index = True)
+        boxscores.to_csv("BoxscoreData/" + file_name + ".csv", index = False )
 
 def parse_boxscores(data_file: str, file_name: str):
-
     def find_comment(comment_parsers,tag:str,idstr:str,classstr:str):
         """
         comment_parsers: List of BS4 parsers of each commented part of the html
@@ -72,32 +65,26 @@ def parse_boxscores(data_file: str, file_name: str):
             #Whenever an error occurs record the url and error
             print(url, err)
             print(ex)
-            if len(bad_urls["boxscore"]) == 0 or bad_urls["boxscore"][-1] != url:
-                bad_urls["boxscore"].append(url)
-                bad_urls["errors"].append([ex])
-            else:
-                bad_urls["errors"][-1].append(ex)
+            bad_urls = bad_urls._append({'boxscore':url,'errors':ex},ignore_index = True)
 
-
-    data = pd.read_csv(data_file)
-    bad_urls = {"boxscore" : [], "errors" : []}
     def process_url(url:str,year: int, week: int):
 
-        url = "https://www.pro-football-reference.com" + url
-        r = requests.get(url)
+        r = requests.get("https://www.pro-football-reference.com" + url)
         current_time = sleep_fun(current_time)
         parser = BeautifulSoup(r.text,"html.parser")
+
+        #Gather all html comments
         comments = parser.find_all(string = lambda text : isinstance(text, Comment))
         comments = list(set(comments))
-        
+
         #Only want the comments that contain tables
         for c in comments:
             try:
                 pd.read_html(c)
             except:
                 comments.remove(c)
-
-
+        
+        #Convert all the commented tables into parsers
         comment_parsers = [BeautifulSoup(comment,"html.parser") for comment in comments]
 
         # Get Data from Game Info Table
@@ -295,6 +282,8 @@ def parse_boxscores(data_file: str, file_name: str):
             error_fun("Play-By-Play Error",url,ex)
 
         return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data | game_info_dict | team_stats_dict | player_stats | starters_dict | snaps | pbp   
+    data = pd.read_csv(data_file)
+    bad_urls = pd.DataFrame(columns = ["boxscore","errors"])
     tqdm.pandas(desc='Progress')
     new_data = data.progress_apply(lambda x: process_url(x.url, x.year,x.week), axis=1,result_type = 'expand')
     while True:
@@ -316,6 +305,8 @@ if __name__ == "__main__":
     warnings.filterwarnings('ignore',message =\
 "The input looks more like a filename than markup. You may want to open this file\
       and pass the filehandle into Beautiful Soup." )
+    get_boxscores(2023,2023,"2023_boxscores")
+
 
 
 

@@ -22,7 +22,7 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
     """
     boxscores = pd.DataFrame(columns = ['url','year','week']) 
     if year_start < 1920 or year_end > 2023:
-        raise Exception.valueError("Invalid Date Range")
+        raise ValueError("Invalid Date Range")
     current_time = time.time()
 
     #Iterate over years, get week urls for each week in each year
@@ -47,6 +47,7 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
         boxscores.to_csv("BoxscoreData/" + file_name + ".csv", index = False )
 
 def parse_boxscores(data_file: str, file_name: str):
+    
     def find_comment(comment_parsers,tag:str,idstr:str,classstr:str):
         """
         comment_parsers: List of BS4 parsers of each commented part of the html
@@ -59,7 +60,7 @@ def parse_boxscores(data_file: str, file_name: str):
             sc = comment.find(tag, id=idstr, class_=classstr)
             if sc != None:
                 return sc
-        return None
+        raise ValueError("No comment table")
     
     def error_fun(err:str,url:str,ex:Exception,bad_urls):
             #Whenever an error occurs record the url and error
@@ -69,7 +70,6 @@ def parse_boxscores(data_file: str, file_name: str):
 
     def get_game_info(parser, comment_parsers):
         game_info_dict = {}
-        print(find_comment(comment_parsers,'div','div_game_info','table_container'))
         game_info = find_comment(comment_parsers,'div','div_game_info','table_container').find_all("tr")
         for row in game_info[1:]:
             row = list(row)
@@ -120,6 +120,7 @@ def parse_boxscores(data_file: str, file_name: str):
             else:
                 team_stats_dict["Home Team Stats"][stat[0].text] += [stat[2].text]
                 team_stats_dict["Away Team Stats"][stat[0].text] += [stat[1].text]
+        return team_stats_dict
 
     def get_player_stats(home:str,away:str,info):
             home_player_data = {}
@@ -153,16 +154,18 @@ def parse_boxscores(data_file: str, file_name: str):
         comments = list(set(comments))
 
         #Only want the comments that contain tables
+        print(len(comments),"First")
+
         for c in comments:
             try:
                 pd.read_html(c)
+                print("this")
             except:
                 comments.remove(c)
+        print(len(comments),"#coms")
         
         #Convert all the commented tables into parsers
         comment_parsers = [BeautifulSoup(comment,"html.parser") for comment in comments]
-        print(len(comment_parsers))
-        print(url)
 
         # Get Data from Game Info Table
         try:
@@ -292,7 +295,13 @@ def parse_boxscores(data_file: str, file_name: str):
         except Exception as ex:
             error_fun("Play-By-Play Error",url,ex,bad_urls)
 
-        return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data | game_info_dict | team_stats_dict | player_stats | starters_dict | snaps | pbp   
+        return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data\
+              | game_info_dict\
+                  | team_stats_dict\
+                      | player_stats\
+                          | starters_dict\
+                              | snaps\
+                                  | pbp   
     
     boxscores = pd.read_csv(data_file)
     bad_urls = pd.DataFrame(columns = ["boxscore","errors"])

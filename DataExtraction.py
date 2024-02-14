@@ -67,7 +67,51 @@ def parse_boxscores(data_file: str, file_name: str):
             print(ex)
             bad_urls = bad_urls._append({'boxscore':url,'errors':ex},ignore_index = True)
 
+    def get_game_info(parser, comment_parsers):
+        game_info_dict = {}
+        game_info = find_comment(comment_parsers,'div','div_game_info','table_container').find_all("tr")
+        for row in game_info[1:]:
+            row = list(row)
+            game_info_dict[row[0].text.replace("*","")] = row[1].text
+
+        score_box = parser.find("div",class_="scorebox")
+
+        coaches = score_box.find_all("div",class_="datapoint")
+        game_info_dict["Home Coach"] = list(list(coaches)[0])[2].text
+        game_info_dict["Away Coach"] = list(list(coaches)[1])[2].text
+
+        sc = list(list(score_box.find_all("div",class_="scorebox_meta"))[0])
+        
+        game_info_dict["Date"] = sc[1].text
+        game_info_dict["Start time"] = sc[2].text.replace("Start Time: ","")
+        game_info_dict["Stadium"] = sc[3].text.replace("Stadium: ","")
+
+        team_urls = [item['href'] for item in score_box.find_all(href=True) if item['href'][:7] == "/teams/"]
+        home,vis = team_urls[1][7:10].upper(),team_urls[0][7:10].upper()
+        game_info_dict["Away Url"], game_info_dict["Home Url"] = team_urls[:2]
+
+        scores = list(score_box.find_all("div",class_ = "score"))
+        game_info_dict["Away Score"], game_info_dict["Home Score"] = scores[0].text,scores[1].text
+
+        records = score_box.find_all("div",class_ = "scores")
+        game_info_dict["Away Record"], game_info_dict["Home Record"] = [item.nextSibling.text for item in records][:2]
+        return game_info_dict, home, vis
+    
+    def get_scoring_data(parser):
+        scoring_data = {"Scoring_Data" : {}}
+        scoring_info = parser.find('div', id="div_scoring", class_="table_container").tbody.select("tr:not(.thead)")
+        for row in scoring_info:
+            for stat in row:
+                if stat.attrs['data-stat'] not in scoring_data["Scoring_Data"]:
+                    scoring_data["Scoring_Data"][stat.attrs['data-stat']] = [stat.text]
+                else:
+                    scoring_data["Scoring_Data"][stat.attrs['data-stat']] += [scoring_data["Scoring_Data"][stat.attrs['data-stat']][-1]] \
+                        if stat.text == "" else [stat.text]
+        return scoring_data
+
+
     def process_url(url:str,year: int, week: int):
+
 
         r = requests.get("https://www.pro-football-reference.com" + url)
         current_time = sleep_fun(current_time)
@@ -88,51 +132,16 @@ def parse_boxscores(data_file: str, file_name: str):
         comment_parsers = [BeautifulSoup(comment,"html.parser") for comment in comments]
 
         # Get Data from Game Info Table
-        game_info_dict = {}
         try:
-            game_info = find_comment(comment_parsers,'div','div_game_info','table_container').find_all("tr")
-            for row in game_info[1:]:
-                row = list(row)
-                game_info_dict[row[0].text.replace("*","")] = row[1].text
+            game_info_dict, home, vis = get_game_info(parser, comment_parsers)
 
-            score_box = parser.find("div",class_="scorebox")
-
-            coaches = score_box.find_all("div",class_="datapoint")
-            game_info_dict["Home Coach"] = list(list(coaches)[0])[2].text
-            game_info_dict["Away Coach"] = list(list(coaches)[1])[2].text
-
-            sc = list(list(score_box.find_all("div",class_="scorebox_meta"))[0])
-            
-            game_info_dict["Date"] = sc[1].text
-            game_info_dict["Start time"] = sc[2].text.replace("Start Time: ","")
-            game_info_dict["Stadium"] = sc[3].text.replace("Stadium: ","")
-
-            team_urls = [item['href'] for item in score_box.find_all(href=True) if item['href'][:7] == "/teams/"]
-            home,vis = team_urls[1][7:10].upper(),team_urls[0][7:10].upper()
-            game_info_dict["Away Url"], game_info_dict["Home Url"] = team_urls[:2]
-
-            scores = list(score_box.find_all("div",class_ = "score"))
-            game_info_dict["Away Score"], game_info_dict["Home Score"] = scores[0].text,scores[1].text
-
-            records = score_box.find_all("div",class_ = "scores")
-            game_info_dict["Away Record"], game_info_dict["Home Record"] = [item.nextSibling.text for item in records][:2]
         except Exception as ex:
             error_fun("Game Info Error",url,ex)
             return {}
 
-
-
-        #Scoring Data
-        scoring_data = {"Scoring_Data" : {}}
+        #Scoring Data 
         try:
-            scoring_info = parser.find('div', id="div_scoring", class_="table_container").tbody.select("tr:not(.thead)")
-            for row in scoring_info:
-                for stat in row:
-                    if stat.attrs['data-stat'] not in scoring_data["Scoring_Data"]:
-                        scoring_data["Scoring_Data"][stat.attrs['data-stat']] = [stat.text]
-                    else:
-                        scoring_data["Scoring_Data"][stat.attrs['data-stat']] += [scoring_data["Scoring_Data"][stat.attrs['data-stat']][-1]] \
-                            if stat.text == "" else [stat.text]
+            scoring_data = get_scoring_data(parser)
         except Exception as ex:
             error_fun("Scoring Data Error",url,ex)
 
@@ -282,30 +291,33 @@ def parse_boxscores(data_file: str, file_name: str):
             error_fun("Play-By-Play Error",url,ex)
 
         return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data | game_info_dict | team_stats_dict | player_stats | starters_dict | snaps | pbp   
-    data = pd.read_csv(data_file)
+    
+    boxscores = pd.read_csv(data_file)
     bad_urls = pd.DataFrame(columns = ["boxscore","errors"])
     tqdm.pandas(desc='Progress')
-    new_data = data.progress_apply(lambda x: process_url(x.url, x.year,x.week), axis=1,result_type = 'expand')
+    boxscore_data = boxscores.progress_apply(lambda x: process_url(x.url, x.year,x.week), axis=1,result_type = 'expand')
+
     while True:
         try:
-            new_data.to_csv(file_name,index = False)
+            boxscore_data.to_csv(file_name,index = False)
             break
-        except:
-            print("close",file_name)
+        except Exception as ex:
+            print(ex,file_name)
             input()
     while True:
         try:
             pd.DataFrame(bad_urls).to_csv(file_name[:-4] + "_bad_urls.csv",index = False)
             break
-        except:
-            print("close error file")
+        except Exception as ex:
+            print(ex)
             input()
 
 if __name__ == "__main__":
     warnings.filterwarnings('ignore',message =\
 "The input looks more like a filename than markup. You may want to open this file\
       and pass the filehandle into Beautiful Soup." )
-    get_boxscores(2023,2023,"2023_boxscores")
+    #get_boxscores(2023,2023,"2023_boxscores")
+    parse_boxscores
 
 
 

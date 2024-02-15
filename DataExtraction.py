@@ -32,7 +32,7 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
         parser = BeautifulSoup(r.text,"html.parser")
         weeks = []
         for item in parser.find_all("a",href = True):
-            if ((str(year) + "/week_") in item['href']) and (item['href'] not in weeks):
+            if ((str(year) + "/week_") in item['href']) and ("https://www.pro-football-reference.com" + item['href'] not in weeks):
                 weeks.append("https://www.pro-football-reference.com" + item['href'])
         
         #Iterate over weeks, get boxscore url for each game in each week
@@ -101,7 +101,7 @@ def parse_boxscores(data_file: str, file_name: str):
         game_info_dict["Away Record"], game_info_dict["Home Record"] = [item.nextSibling.text for item in records][:2]
         return game_info_dict, home, vis
     
-    def get_scoring_data(parser):
+    def get_scoring_data(parser, _):
         scoring_data = {"Scoring_Data" : {}}
         scoring_info = parser.find('div', id="div_scoring", class_="table_container").tbody.select("tr:not(.thead)")
         for row in scoring_info:
@@ -113,7 +113,7 @@ def parse_boxscores(data_file: str, file_name: str):
                         if stat.text == "" else [stat.text]
         return scoring_data
 
-    def get_team_stats(comment_parsers):
+    def get_team_stats(_, comment_parsers):
         team_stats_dict = {"Home Team Stats" : {}, "Away Team Stats" : {}}
         team_stats_info  = find_comment(comment_parsers,'div','div_team_stats','table_container').find_all("tr")
         for stat in team_stats_info: #stat variable in this case applies to the whole row since each row is a stat
@@ -146,7 +146,7 @@ def parse_boxscores(data_file: str, file_name: str):
                             away_player_data[stat.attrs['data-stat']] += ["0"] if stat.text == "" else [stat.text]
             return home_player_data,away_player_data
     
-    def get_starters_info(parser,comment_parsers):
+    def get_starters(parser,comment_parsers):
         starters_dict = {"Home Starters" : {}, "Away Starters" : {}}
         home_starter_info = find_comment(comment_parsers,'div','div_home_starters','table_container').tbody.select("tr:not(.thead)")
         for item in home_starter_info:
@@ -160,7 +160,7 @@ def parse_boxscores(data_file: str, file_name: str):
                                                     starters_dict["Away Starters"][item[1].text] + [item[0].text]
         return starters_dict
 
-    def get_snaps(parser,comment_parsers):
+    def get_snaps(_,comment_parsers):
         #Get Snaps Data
         snaps = {"Home Snaps" : {}, "Away Snaps" : {}}
         home_snap_info = find_comment(comment_parsers, 'div', 'div_home_snap_counts','table_container')
@@ -177,7 +177,7 @@ def parse_boxscores(data_file: str, file_name: str):
         return snaps
         
 
-    def get_drives(parser, comment_parsers):
+    def get_drives(_, comment_parsers):
         drives = {"Home Drives" : {}, "Away Drives" : {}}
         home_drives_info = find_comment(comment_parsers, 'div','div_home_drives','table_container')
         away_drives_info = find_comment(comment_parsers, 'div','div_vis_drives','table_container')
@@ -196,7 +196,7 @@ def parse_boxscores(data_file: str, file_name: str):
                         drives["Away Drives"][stat.attrs['data-stat']] + [stat.text]
         return drives
         
-    def get_pbp(parser, comment_parsers):
+    def get_pbp(_, comment_parsers):
         pbp = {"Play-By-Play" : {}}
         pbp_info = find_comment(comment_parsers, 'div','div_pbp','table_container')
         if pbp_info != None:
@@ -213,12 +213,10 @@ def parse_boxscores(data_file: str, file_name: str):
         r = requests.get("https://www.pro-football-reference.com" + url)
         current_time = sleep_fun(current_time)
         parser = BeautifulSoup(r.text,"html.parser")
-        with open('test.txt'.format(file_name), mode='wt', encoding='utf-8') as file:
-            file.write(parser.prettify())
 
         #Gather all html comments
         comments = parser.find_all(string = lambda text : isinstance(text, Comment))
-        #comments = list(set(comments))
+        comments = list(set(comments))
         
         #Convert all the commented tables into parsers
         comment_parsers = [BeautifulSoup(comment,"html.parser") for comment in comments]
@@ -231,17 +229,15 @@ def parse_boxscores(data_file: str, file_name: str):
             error_fun("Game Info Error",url,ex,bad_urls)
             return {}
 
-        #Scoring Data 
-        try:
-            scoring_data = get_scoring_data(parser)
-        except Exception as ex:
-            error_fun("Scoring Data Error",url,ex,bad_urls)
+        dicts = game_info_dict
+        for fun, name in [[get_scoring_data,"Scoring Data"], [get_team_stats,"Team Stats"],[get_starters,"Starters"],\
+                          [get_snaps,"Snaps"],[get_drives,"Drives"],[get_pbp,"Play-By-Play"]]:
+            try:
+                dicts = dicts | fun(parser,comment_parsers)
+            except Exception as ex:
+                error_fun(name + " Error",url,ex,bad_urls)
 
-        # Get Data from Teams Stats Table
-        try:
-            team_stats_dict = get_team_stats(comment_parsers)
-        except Exception as ex:
-            error_fun("Team Stats Error",url,ex,bad_urls)
+
             
         #player stats
         player_stats = {}
@@ -260,40 +256,7 @@ def parse_boxscores(data_file: str, file_name: str):
                 player_stats["Home " + name + " Player Stats"], player_stats["Away " + name + " Player Stats"] = None,None
 
 
-        #Starters
-        try:
-            starters_dict = get_starters_info(parser, comment_parsers)
-        except Exception as ex:
-            error_fun("Starters Error",url,ex,bad_urls)
-            starters_dict = {"Home Starters" : {}, "Away Starters" : {}}
-
-        try:
-            snaps = get_snaps(parser, comment_parsers)
-        except Exception as ex:
-            error_fun("Snaps Error",url,ex,bad_urls)
-            snaps = {"Home Snaps" : {}, "Away Snaps" : {}}
-
-        #Get drives data
-        try:
-            drives = get_drives(parser, comment_parsers)
-        except Exception as ex:
-            error_fun("Drives Error",url,ex, bad_urls)
-            drives = {"Home Drives" : {}, "Away Drives" : {}}
-
-        #Get Play-By-Play Data
-        try:
-            pbp = get_pbp(parser, comment_parsers)
-        except Exception as ex:
-            error_fun("Play-By-Play Error",url,ex,bad_urls)
-            pbp = {"Play-By-Play" : {}}
-
-        return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data\
-              | game_info_dict\
-                  | team_stats_dict\
-                      | player_stats\
-                          | starters_dict\
-                              | snaps\
-                                  | pbp   
+        return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | dicts | player_stats
     
     boxscores = pd.read_csv(data_file)
     bad_urls = pd.DataFrame(columns = ["boxscore","errors"])
@@ -316,9 +279,6 @@ def parse_boxscores(data_file: str, file_name: str):
             input()
 
 if __name__ == "__main__":
-    warnings.filterwarnings('ignore')
-    #get_boxscores(2023,2023,"2023_boxscores")
-    parse_boxscores("BoxscoreData/2023_boxscores.csv","BoxscoreData/2023_data.csv")
 
 
 

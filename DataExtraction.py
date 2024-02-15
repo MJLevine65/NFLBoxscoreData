@@ -41,7 +41,7 @@ def get_boxscores(year_start: int, year_end: int, file_name: str):
             current_time = sleep_fun(current_time)
             parser = BeautifulSoup(r.text,"html.parser")
             for item in parser.find_all("a",href = True):
-                if (("/boxscores/") in item['href']) and (item['href'] not in boxscores['url']) and (item['href'] != "/boxscores/"):
+                if (("/boxscores/") in item['href']) and (item['href'] not in boxscores['url']) and(len(item['href']) == 27):
                     boxscores = \
                     boxscores._append({'url':item['href'],'year':year, 'week': week+1},ignore_index = True)
         boxscores.to_csv("BoxscoreData/" + file_name + ".csv", index = False )
@@ -57,10 +57,13 @@ def parse_boxscores(data_file: str, file_name: str):
         classstr: class of comment parser that is being searched for
         """
         for comment in comment_parsers:
-            sc = comment.find(tag, id=idstr, class_=classstr)
+            sc = comment.find(tag, id = idstr, class_ = classstr)
+            #print(sc)
             if sc != None:
                 return sc
+        print(idstr)
         raise ValueError("No comment table")
+        return None
     
     def error_fun(err:str,url:str,ex:Exception,bad_urls):
             #Whenever an error occurs record the url and error
@@ -70,7 +73,8 @@ def parse_boxscores(data_file: str, file_name: str):
 
     def get_game_info(parser, comment_parsers):
         game_info_dict = {}
-        game_info = find_comment(comment_parsers,'div','div_game_info','table_container').find_all("tr")
+        game_info = find_comment(comment_parsers,'div','div_game_info','table_container')
+        game_info = game_info.find_all("tr")
         for row in game_info[1:]:
             row = list(row)
             game_info_dict[row[0].text.replace("*","")] = row[1].text
@@ -111,7 +115,7 @@ def parse_boxscores(data_file: str, file_name: str):
 
     def get_team_stats(comment_parsers):
         team_stats_dict = {"Home Team Stats" : {}, "Away Team Stats" : {}}
-        team_stats_info  = find_comment(comment_parsers,'div','div_team_stats','table_container').tbody.select("tr:not(.thead)")
+        team_stats_info  = find_comment(comment_parsers,'div','div_team_stats','table_container').find_all("tr")
         for stat in team_stats_info: #stat variable in this case applies to the whole row since each row is a stat
             stat = list(stat)
             if stat[0].text not in team_stats_dict["Home Team Stats"]:
@@ -141,28 +145,80 @@ def parse_boxscores(data_file: str, file_name: str):
                         else:
                             away_player_data[stat.attrs['data-stat']] += ["0"] if stat.text == "" else [stat.text]
             return home_player_data,away_player_data
+    
+    def get_starters_info(parser,comment_parsers):
+        starters_dict = {"Home Starters" : {}, "Away Starters" : {}}
+        home_starter_info = find_comment(comment_parsers,'div','div_home_starters','table_container').tbody.select("tr:not(.thead)")
+        for item in home_starter_info:
+            item = list(item)
+            starters_dict["Home Starters"][item[1].text] = [item[0].text] if item[1].text not in starters_dict["Home Starters"] else \
+                                                            starters_dict["Home Starters"][item[1].text] + [item[0].text]
+        away_starter_info = find_comment(comment_parsers,'div','div_vis_starters','table_container').tbody.select("tr:not(.thead)")
+        for item in away_starter_info:
+            item = list(item)
+            starters_dict["Away Starters"][item[1].text] = [item[0].text] if item[1].text not in starters_dict["Away Starters"] else \
+                                                    starters_dict["Away Starters"][item[1].text] + [item[0].text]
+        return starters_dict
 
+    def get_snaps(parser,comment_parsers):
+        #Get Snaps Data
+        snaps = {"Home Snaps" : {}, "Away Snaps" : {}}
+        home_snap_info = find_comment(comment_parsers, 'div', 'div_home_snap_counts','table_container')
+        away_snap_info = find_comment(comment_parsers, 'div', 'div_vis_snap_counts','table_container')
+        if home_snap_info != None and away_snap_info != None:
+            home_snap_info,away_snap_info = home_snap_info.tbody.select("tr:not(.thead)"), away_snap_info.tbody.select("tr:not(.thead)")
+            for item in home_snap_info:
+                item = list(item)
+                snaps["Home Snaps"][item[0].text] = {"Off" : (item[2].text,item[3].text), "Def" : (item[4].text,item[5].text), "ST" : (item[6].text,item[7].text)}
+            for item in away_snap_info:
+                item = list(item)
+                snaps["Away Snaps"][item[0].text] = {"Off" : (item[2].text,item[3].text), "Def" : (item[4].text,item[5].text), "ST" : (item[6].text,item[7].text)}
+        
+        return snaps
+        
+
+    def get_drives(parser, comment_parsers):
+        drives = {"Home Drives" : {}, "Away Drives" : {}}
+        home_drives_info = find_comment(comment_parsers, 'div','div_home_drives','table_container')
+        away_drives_info = find_comment(comment_parsers, 'div','div_vis_drives','table_container')
+        
+        if home_drives_info != None and away_drives_info != None:
+            home_drives_info,away_drives_info = home_drives_info.tbody.select("tr:not(.thead)"), away_drives_info.tbody.select("tr:not(.thead)")
+            for row in home_drives_info:
+                row = list(row)
+                for stat in row:
+                    drives["Home Drives"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in drives["Home Drives"] else \
+                        drives["Home Drives"][stat.attrs['data-stat']] + [stat.text]
+            for row in away_drives_info:
+                row = list(row)
+                for stat in row:
+                    drives["Away Drives"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in drives["Away Drives"] else \
+                        drives["Away Drives"][stat.attrs['data-stat']] + [stat.text]
+        return drives
+        
+    def get_pbp(parser, comment_parsers):
+        pbp = {"Play-By-Play" : {}}
+        pbp_info = find_comment(comment_parsers, 'div','div_pbp','table_container')
+        if pbp_info != None:
+            pbp_info = pbp_info.tbody.select("tr:not(.thead)")
+            for row in pbp_info:
+                row = list(row)
+                for stat in row:
+                    pbp["Play-By-Play"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in pbp["Play-By-Play"] else \
+                        pbp["Play-By-Play"][stat.attrs['data-stat']] + [stat.text]
+        return pbp
     def process_url(url:str,year: int, week: int,bad_urls):
         current_time = time.time()
 
         r = requests.get("https://www.pro-football-reference.com" + url)
         current_time = sleep_fun(current_time)
         parser = BeautifulSoup(r.text,"html.parser")
+        with open('test.txt'.format(file_name), mode='wt', encoding='utf-8') as file:
+            file.write(parser.prettify())
 
         #Gather all html comments
         comments = parser.find_all(string = lambda text : isinstance(text, Comment))
-        comments = list(set(comments))
-
-        #Only want the comments that contain tables
-        print(len(comments),"First")
-
-        for c in comments:
-            try:
-                pd.read_html(c)
-                print("this")
-            except:
-                comments.remove(c)
-        print(len(comments),"#coms")
+        #comments = list(set(comments))
         
         #Convert all the commented tables into parsers
         comment_parsers = [BeautifulSoup(comment,"html.parser") for comment in comments]
@@ -189,111 +245,47 @@ def parse_boxscores(data_file: str, file_name: str):
             
         #player stats
         player_stats = {}
-        try:
-            ax = (lambda x: get_player_stats(home,vis,x.tbody.select("tr:not(.thead)")) if x != None else ({}, {}))
-            #Get offensive player stats
-            offense_info = parser.find('div', id="div_player_offense", class_="table_container")
-            player_stats["Home Off Player Stats"], player_stats["Away Off Player Stats"] = ax(offense_info)
+        ax = (lambda x: get_player_stats(home,vis,x.tbody.select("tr:not(.thead)")) if x != None else ({}, {}))
+        #Get offensive player stats
+        offense_info = parser.find('div', id="div_player_offense", class_="table_container")
+        player_stats["Home Off Player Stats"], player_stats["Away Off Player Stats"] = ax(offense_info)
 
-            for id,name in [["player_defnese","Def"],["returns","Ret"],["kicking","Kick"],["passing_advanced","Adv Pass"],\
-            ["receiving_advanced","Adv Rec"],["rushing_advanced","Adv Rush"],["defense_advanced","Adv Def"]]:
+        for id,name in [["player_defense","Def"],["returns","Ret"],["kicking","Kick"],["passing_advanced","Adv Pass"],\
+        ["receiving_advanced","Adv Rec"],["rushing_advanced","Adv Rush"],["defense_advanced","Adv Def"]]:
+            try:
                 info = find_comment(comment_parsers,'div','div_' + id,'table_container')
                 player_stats["Home " + name + " Player Stats"], player_stats["Away " + name + " Player Stats"] = ax(info)
+            except Exception as ex:
+                error_fun(name + " error",url,ex, bad_urls)
+                player_stats["Home " + name + " Player Stats"], player_stats["Away " + name + " Player Stats"] = None,None
 
-            # #Get defensive player stats
-            # defense_info = find_comment(comment_parsers,'div','div_player_defense','table_container')
-            # player_stats["Home Def Player Stats"], player_stats["Away Def Player Stats"] = ax(defense_info)
 
-            # #Get return player stats
-            # returns_info = find_comment(comment_parsers,'div','div_returns','table_container')
-            # player_stats["Home Ret Player Stats"], player_stats["Away Ret Player Stats"] = ax(returns_info)
-
-            # #Get kicking player stats
-            # kicking_info = find_comment(comment_parsers,'div','div_kicking','table_container')
-            # player_stats["Home Kick Player Stats"], player_stats["Away Kick Player Stats"] = ax(kicking_info)
-            # #Advanced passing
-            # ap_info = find_comment(comment_parsers,'div','div_passing_advanced','table_container')
-            # player_stats["Home Adv Pass Player Stats"], player_stats["Away Adv Pass Player Stats"] = ax(ap_info)
-
-            # #Advanced recieving
-            # ar_info = find_comment(comment_parsers,'div','div_receiving_advanced','table_container')
-            # player_stats["Home Adv Rec Player Stats"], player_stats["Away Adv Rec Player Stats"] = ax(ar_info)
-            
-            # #Advanced rushing
-            # aru_info = find_comment(comment_parsers,'div','div_rushing_advanced','table_container')
-            # player_stats["Home Adv Rush Player Stats"], player_stats["Away Adv Rush Player Stats"] = ax(aru_info)
-            
-            # #Advanced defense
-            # ad_info = find_comment(comment_parsers,'div','div_defense_advanced','table_container')
-            # player_stats["Home Adv Def Player Stats"], player_stats["Away Adv Def Player Stats"] = ax(ad_info)
-        except Exception as ex:
-            error_fun("Player Stats Error",url,ex,bad_urls)
-
-        starters_dict = {"Home Starters" : {}, "Away Starters" : {}}
         #Starters
         try:
-            home_starter_info = find_comment(comment_parsers,'div','div_home_starters','table_container').tbody.select("tr:not(.thead)")
-            for item in home_starter_info:
-                item = list(item)
-                starters_dict["Home Starters"][item[1].text] = [item[0].text] if item[1].text not in starters_dict["Home Starters"] else \
-                                                                starters_dict["Home Starters"][item[1].text] + [item[0].text]
-            away_starter_info = find_comment(comment_parsers,'div','div_vis_starters','table_container').tbody.select("tr:not(.thead)")
-            for item in away_starter_info:
-                item = list(item)
-                starters_dict["Away Starters"][item[1].text] = [item[0].text] if item[1].text not in starters_dict["Away Starters"] else \
-                                                                starters_dict["Away Starters"][item[1].text] + [item[0].text]
+            starters_dict = get_starters_info(parser, comment_parsers)
         except Exception as ex:
             error_fun("Starters Error",url,ex,bad_urls)
+            starters_dict = {"Home Starters" : {}, "Away Starters" : {}}
 
-        snaps = {"Home Snaps" : {}, "Away Snaps" : {}}
         try:
-            #Get Snaps Data
-            home_snap_info = find_comment(comment_parsers, 'div', 'div_home_snap_counts','table_container')
-            away_snap_info = find_comment(comment_parsers, 'div', 'div_vis_snap_counts','table_container')
-            if home_snap_info != None and away_snap_info != None:
-                home_snap_info,away_snap_info = home_snap_info.tbody.select("tr:not(.thead)"), away_snap_info.tbody.select("tr:not(.thead)")
-                for item in home_snap_info:
-                    item = list(item)
-                    snaps["Home Snaps"][item[0].text] = {"Off" : (item[2].text,item[3].text), "Def" : (item[4].text,item[5].text), "ST" : (item[6].text,item[7].text)}
-                for item in away_snap_info:
-                    item = list(item)
-                    snaps["Away Snaps"][item[0].text] = {"Off" : (item[2].text,item[3].text), "Def" : (item[4].text,item[5].text), "ST" : (item[6].text,item[7].text)}
+            snaps = get_snaps(parser, comment_parsers)
         except Exception as ex:
             error_fun("Snaps Error",url,ex,bad_urls)
+            snaps = {"Home Snaps" : {}, "Away Snaps" : {}}
+
         #Get drives data
-        drives = {"Home Drives" : {}, "Away Drives" : {}}
         try:
-            home_drives_info = find_comment(comment_parsers, 'div','div_home_drives','table_container')
-            away_drives_info = find_comment(comment_parsers, 'div','div_vis_drives','table_container')
-            
-            if home_drives_info != None and away_drives_info != None:
-                home_drives_info,away_drives_info = home_drives_info.tbody.select("tr:not(.thead)"), away_drives_info.tbody.select("tr:not(.thead)")
-                for row in home_drives_info:
-                    row = list(row)
-                    for stat in row:
-                        drives["Home Drives"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in drives["Home Drives"] else \
-                            drives["Home Drives"][stat.attrs['data-stat']] + [stat.text]
-                for row in away_drives_info:
-                    row = list(row)
-                    for stat in row:
-                        drives["Away Drives"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in drives["Away Drives"] else \
-                            drives["Away Drives"][stat.attrs['data-stat']] + [stat.text]
+            drives = get_drives(parser, comment_parsers)
         except Exception as ex:
             error_fun("Drives Error",url,ex, bad_urls)
+            drives = {"Home Drives" : {}, "Away Drives" : {}}
 
         #Get Play-By-Play Data
-        pbp = {"Play-By-Play" : {}}
         try:
-            pbp_info = find_comment(comment_parsers, 'div','div_pbp','table_container')
-            if pbp_info != None:
-                pbp_info = pbp_info.tbody.select("tr:not(.thead)")
-                for row in pbp_info:
-                    row = list(row)
-                    for stat in row:
-                        pbp["Play-By-Play"][stat.attrs['data-stat']] = [stat.text] if stat.attrs['data-stat'] not in pbp["Play-By-Play"] else \
-                            pbp["Play-By-Play"][stat.attrs['data-stat']] + [stat.text]
+            pbp = get_pbp(parser, comment_parsers)
         except Exception as ex:
             error_fun("Play-By-Play Error",url,ex,bad_urls)
+            pbp = {"Play-By-Play" : {}}
 
         return {"Year" : year, "Week" : week, "Home" : home, "Away" : vis} | scoring_data\
               | game_info_dict\
@@ -324,9 +316,7 @@ def parse_boxscores(data_file: str, file_name: str):
             input()
 
 if __name__ == "__main__":
-    warnings.filterwarnings('ignore',message =\
-"The input looks more like a filename than markup. You may want to open this file\
-      and pass the filehandle into Beautiful Soup." )
+    warnings.filterwarnings('ignore')
     #get_boxscores(2023,2023,"2023_boxscores")
     parse_boxscores("BoxscoreData/2023_boxscores.csv","BoxscoreData/2023_data.csv")
 

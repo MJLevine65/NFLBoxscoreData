@@ -69,24 +69,6 @@ def kick_logging(df:pd.DataFrame, file_name: str):
 
             team = play["location"].split(" ")[0]
 
-            """
-            if distance < 50:
-                if row["Home"] == team:
-                    team = row["Away"]
-                    kick_log["Home/Away"].append("Away")
-                elif row["Away"] == team:
-                    team = row["Home"]
-                    kick_log["Home/Away"].append("Home")
-                else:
-                    print(team)
-            else:
-                if row["Home"] == team:
-                    kick_log["Home/Away"].append("Home")
-                elif row["Away"] == team:
-                    kick_log["Home/Away"].append("Away")
-                else:
-                    print(team)
-            """
 
             kicker = " ".join(play["detail"].split("yard field goal")[0].split(" ")[:-2]).strip()
             kick_log["Kicker"].append(kicker)
@@ -140,7 +122,6 @@ def kick_logging(df:pd.DataFrame, file_name: str):
 
             
 
-    print("counter: " + str(counter))
 
     kick_log = pd.DataFrame(kick_log)
     print(kick_log)
@@ -222,34 +203,3 @@ def test_model_xgb(test_path:str,model_path:str):
 
 
 if __name__ == "__main__":
-    """
-    sheets = open_file("1970_2023BoxscoreData.xlsx")
-    df = pd.concat([sheets["Game Info"],sheets["Kick Player Stats"]],axis=1)
-    df = sheets["Game Info"]
-    df = df[df["Year"] > 1993]
-    print(df)
-
-    kick_logging(df,"1994_2023_FieldGoal_Data.xlsx")
-    """
-    """
-    
-    feature_frame = encode_data(os.getcwd() + "//KicksData//1994_2023_FieldGoal_Data.xlsx")
-    train,test = train_test_split(feature_frame,test_size = .1)
-    train_y,test_y = train["Made"],test["Made"]
-    train.drop(columns = "Made",inplace = True)
-    test.drop(columns = "Made",inplace = True)
-    train,test = xgb.DMatrix(train,label = train_y,missing = np.NaN),xgb.DMatrix(test,label = test_y,missing = np.NaN)
-    train.save_binary(os.getcwd() + "//KicksData//" + "KicksDataTrainSet"),test.save_binary(os.getcwd() + "//KicksData//" + "KicksDataTestSet")
-    feature_frame.to_csv(os.getcwd() + "//KicksData//" + "EncodedFeatureData.csv")
-    """
-
-    """
-    path = os.getcwd() + "//KicksData//"
-    create_model_xgb(train_path = path + "KicksDataTrainSet",model_path = path + "KickDataModel_1.model")
-    #"""
-
-    #"""
-    path = os.getcwd() + "//KicksData//"
-    test_model_xgb(path + "KicksDataTrainSet",path + "KickDataModel_1.model")
-    
-    #"""

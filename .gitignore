@@ -1,0 +1,7 @@
+data
+BoxscoreData
+**/__pycache__
+**/__init__.py
+htmlcov
+.coverage
+.coveragerc

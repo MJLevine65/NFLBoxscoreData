@@ -12,6 +12,11 @@ class YearScraper(Scraper):
     def __init__(self):
         super().__init__()
 
+    def scrape_seasons(self, year_interval: tuple[int,int]):
+        year_start: int = year_interval[0]
+        year_end: int = year_interval[1]
+        parser: BeautifulSoup
+
     def fetch_boxscore_urls(self, year_interval: tuple[int,int]):
         year_start: int = year_interval[0]
         year_end: int = year_interval[1]
@@ -24,16 +29,11 @@ class YearScraper(Scraper):
         logger = getLogger(__name__)
         logger.warning("Fetching Boxscore URLs for years " + str(year_start) + " to " + str(year_end))
 
-
-
-        # Get boxscore urls
-        if (year_start < 1920 or year_end > 2025) or (year_start > year_end):
-            raise Exception.valueError("Invalid Date Range")
         
         for year in [str(i) for i in range(year_start,year_end+1) ]:
 
             logger.warning("Fetching Boxscore URLs for year " + year)
-            data: Dict[str: list[str]] = {'url' : [], 'year' : [], 'week' : []}
+            data: dict[str: list[str]] = {'url' : [], 'year' : [], 'week' : []}
             parser = self.make_call("https://www.pro-football-reference.com/years/" + year + "/")
 
             parser_urls = [item['href'] for item in parser.find_all("a",href = True)]
